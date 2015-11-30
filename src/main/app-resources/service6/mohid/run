@@ -1,0 +1,135 @@
+#!/bin/bash
+# add ciop commands
+source ${ciop_job_include}
+
+ciop-enable-debug
+
+# define the exit codes                                                                                                                                                                                                                                                       
+SUCCESS=0
+ERR_NOINPUT=1
+ERR_BINNING=2
+ERR_NOPARAMS=5
+ERR_JPEGTMP=7
+ERR_BROWSE=9
+
+# add a trap to exit gracefully
+function cleanExit ()
+{
+   local retval=$?
+   local msg=""
+   case "$retval" in
+     $SUCCESS)      msg="Processing successfully concluded";;
+     $ERR_NOPARAMS) msg="Outout format not defined";;
+     $ERR_GDAL)    msg="Graph processing of job ${JOBNAME} failed (exit code $res)";;
+     *)             msg="Unknown error";;
+   esac
+   [ "$retval" != "0" ] && ciop-log "ERROR" "Error $retval - $msg, processing aborted" || ciop-log "INFO" "$msg"
+   exit $retval
+}
+trap cleanExit EXIT
+
+# Execution area
+export MOHID_HOME=$_CIOP_APPLICATION_PATH/service6/mohid
+export MOHID_BIN=$MOHID_HOME/bin
+export PATH=$MOHID_HOME:$MOHID_BIN:$PATH
+
+# create the S6 configuration dir
+mkdir -p $TMPDIR/s6/mohid
+
+# create INPUTDIR and OUTPUTDIR if does not exist
+mkdir -p $TMPDIR/s6/data/input
+mkdir -p $TMPDIR/s6/data/output
+mkdir -p $TMPDIR/s6/mohid/data
+
+export S6DIR=$TMPDIR/s6
+export CONFDIR=$S6DIR/mohid
+export DATADIR=$TMPDIR/s6/mohid/data
+export INPUTDIR=$S6DIR/data/input
+export OUTPUTDIR=$S6DIR/data/output
+
+mkdir -p $CONFDIR/temp
+mkdir -p $CONFDIR/control
+mkdir -p $CONFDIR/plot
+mkdir -p $CONFDIR/data
+mkdir -p $CONFDIR/download
+
+
+
+#hadoop dfs -ls hdfs://sb-10-15-22-16.sensyf.terradue.int:8020/ciop/run/service6/0000008-151001000058342-oozie-oozi-W/eoip/data/
+
+ciop-log "INFO" "MOHID RUN: Starting iterative process" 
+
+while read product
+do
+   echo "PRODUCT =" $product
+
+   #------------------------------------------------------------------------------
+   ciop-log "INFO" "MOHID RUN Step 1/6: Preparing folders" 
+   echo "MOHID RUN Step 1/6: Preparing folders" 
+   rm -r $CONFDIR/temp
+   rm -r $CONFDIR/control
+   rm -r $CONFDIR/plot
+   rm $CONFDIR/data/*
+   rm $CONFDIR/download/*
+
+   #------------------------------------------------------------------------------
+   ciop-log "INFO" "MOHID RUN Step 2/6: Retrieving product" 
+   echo "MOHID RUN Step 2/6: Retrieving configuration" 
+   hadoop dfs -get $product $CONFDIR/download/
+   echo ls $CONFDIR/download
+   plot=`basename $(ls $CONFDIR/download/*.tgz) .tgz`
+   tar -xzvf $CONFDIR/download/$plot.tgz $CONFDIR/data/
+   rm $CONFDIR/download/*
+
+   #------------------------------------------------------------------------------
+   #ciop-log "INFO" "MOHID PRE Step 3/6: Retrieving configuration" 
+   hadoop dfs -get hdfs://sb-10-15-22-16.sensyf.terradue.int:8020/tmp/mohid-manager/$plot.tgz $CONFDIR/download/
+   ls $CONFDIR/download
+   cd $CONFDIR
+   tar -xzvf $CONFDIR/download/$plot.tgz
+   ls 
+   rm $CONFDIR/download/$plot.tgz
+ 
+   
+   #cd $CONFDIR/control
+   #echo '{input} '$DATADIR >> replace.list
+   #echo '{sim_path} '$CONFDIR >> replace.list
+   #mono $MOHID_BIN/JauchToolsConsole.exe -t=Replace -v -f=replace.list -o=mohid-conf-run.template -d=mohid-conf-run.cfg
+   #echo ls
+
+   #------------------------------------------------------------------------------
+   #ciop-log "INFO" "MOHID RUN Step 4/6: Retrieving input product" 
+   #echo "MOHID RUN Step 4/6: Retrieving input product" 
+    
+   #prod=`ciop-copy -U $product -O $CONFDIR/download`
+   #ciop-log "INFO" "prod = "$prod
+
+   #cd $CONFDIR
+   #tar -xzvf $CONFDIR/download/$plot.tgz data/
+   #rm $CONFDIR/download/$plot.tgz
+   #echo ls data/
+
+   #------------------------------------------------------------------------------
+   ciop-log "INFO" "MOHID RUN Step 5/6: Running model" 
+   echo "MOHID RUN Step 5/6: Processing input product" 
+   cd $CONFDIR/$plot/exe
+   /application/service6/mohid/bin/mohid/mohidland
+   #ls
+   #mono $MOHID_BIN/JauchToolsConsole.exe -t=RunnerEngine -c=mohid-conf-run.cfg -v
+   
+
+   #------------------------------------------------------------------------------
+   ciop-log "INFO" "MOHID RUN Step 6/6: preparing output product" 
+   echo "MOHID RUN Step 6/6: preparing output product" 
+   cd $CONFDIR
+   tar czvf $OUTPUTDIR/$plot"_results.tgz" $plot
+   hadoop dfs -mkdir /tmp/mohid-manager/results/ 
+   hadoop dfs -rm /tmp/mohid-manager/results/$plot"_results.tgz"
+   hadoop dfs -put $OUTPUTDIR/$plot"_results.tgz" /tmp/mohid-manager/results/
+   
+done
+
+ciop-log "INFO" "MOHID RUN: PUBLISHING" 
+ciop-publish $OUTPUTDIR/*
+
+exit 0

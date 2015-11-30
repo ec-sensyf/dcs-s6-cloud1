@@ -1,0 +1,28 @@
+{
+  "s2_input": "./s2_input",
+  "create_ndvi":{
+  	"input_folder": "/data/input",
+  	"output_folder": "/create_ndvi/output",
+  	"processed_folder": "/create_ndvi/processed"
+  },
+  
+  "create_lai":{
+    "create_arff": "False",
+  	"input_folder": "/create_ndvi/output",
+  	"output_folder": "/convert_geotiff_asc/input",
+  	"processed_folder": "/create_lai/processed",
+  	"lai_model": "/kd_lai/models/m5p_nonLinear.model"
+  },
+  "create_tiles":{
+    "pixels": 50,
+  	"input_folder": "/create_lai/output",
+  	"output_folder": "/convert_geotiff_asc/input"
+  },
+  "convert_geotiff_asc": {
+  	"input_folder": "/convert_geotiff_asc/input",
+  	"output_folder": "/data/output",
+  	"processed_folder": "/convert_geotiff_asc/processed"
+  },
+  "version": "1.0",
+  "description": "This is the configuration file for the EOIP class"  
+}

@@ -1,0 +1,8 @@
+@relation lai-linha-weka.filters.unsupervised.attribute.Remove-R3-4
+
+@attribute ndvi numeric
+@attribute sowing_days numeric
+@attribute lai numeric
+
+@data
+0.42911,72,0.120668

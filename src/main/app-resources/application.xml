@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<application xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" id="sensyf_s6">
+  <jobTemplates>
+    <jobTemplate id="eoip">
+      <streamingExecutable>/application/service6/eoip/run</streamingExecutable>
+      <defaultParameters>
+        <parameter id="number_shapes" title="Number of Shapes" abstract="Test with X shapefiles" scope="runtime" type="opensearch" target="time:start">2012-04-06T10:24:29.000Z</parameter>
+      </defaultParameters>
+      <defaultJobconf>
+	<property id="mapred.task.timeout">3600000</property>
+      </defaultJobconf>
+    </jobTemplate>
+    <jobTemplate id="mohid">
+      <streamingExecutable>/application/service6/mohid/run</streamingExecutable>
+      <defaultParameters />
+      <defaultJobconf />
+    </jobTemplate>
+  </jobTemplates>
+  <workflow id="service6" title="eoip module" abstract="Workflow for the EOIP module in service 6">
+    <workflowVersion>1.0</workflowVersion>
+    <node id="eoip">
+      <job id="eoip" />
+      <sources>
+        <source refid="file:urls">/application/service6/eoip/shape_list</source>
+      </sources>
+      <parameters />
+    </node>
+    <node id="mohid">
+      <job id="mohid" />
+      <sources>
+        <source refid="wf:node">eoip</source>
+      </sources>
+      <parameters />
+    </node>
+  </workflow>
+</application>

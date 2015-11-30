@@ -1,0 +1,137 @@
+#!/bin/bash
+
+# add ciop commands
+source ${ciop_job_include}
+# define the exit codes                                                                                                                                                                                                                                                       
+SUCCESS=0
+ERR_NOINPUT=1
+ERR_BINNING=2
+ERR_NOPARAMS=5
+ERR_JPEGTMP=7
+ERR_BROWSE=9
+
+# the EOIP relevant dirs
+export EOIP_HOME=$_CIOP_APPLICATION_PATH/service6/eoip/
+export EOIP_BIN=$EOIP_HOME/sensyf-eoip/
+
+export EOIP_IMAGEDIR=/tmp/s6-files/
+
+export EOIP_INPUT=$EOIP_BIN/data/input/
+export EOIP_OUTPUT=$EOIP_BIN/data/output/
+
+# add executables to PATH
+export PATH=$EOIP_HOME:$EOIP_BIN:$PATH
+
+# create the S6 configuration dir
+mkdir -p $TMPDIR/s6/eoip/
+export CONFDIR=$TMPDIR/s6/eoip/
+
+# create Service 6 HFS dir does not exist
+export S6DIR=$TMPDIR/s6/
+export WEKA_JAR_PATH=$S6DIR/weka/weka.jar
+export CLASSPATH=$S6DIR/weka/weka.jar:.
+
+#create CATALOGUE recipient if it does not exist
+mkdir -p $TMPDIR/s6-catalogue
+export CATALOGUE_RECIPIENT=$TMPDIR/s6-catalogue/
+
+
+# add a trap to exit gracefully
+function cleanExit ()
+{
+   local retval=$?
+   local msg=""
+   case "$retval" in
+     $SUCCESS)      msg="Processing successfully concluded";;
+     $ERR_NOPARAMS) msg="Outout format not defined";;
+     $ERR_GDAL)    msg="Graph processing of job ${JOBNAME} failed (exit code $res)";;
+     *)             msg="Unknown error";;
+   esac
+   [ "$retval" != "0" ] && ciop-log "ERROR" "Error $retval - $msg, processing aborted" || ciop-log "INFO" "$msg"
+   exit $retval
+}
+trap cleanExit EXIT
+
+# Execution area
+
+# for all new file, process the EOIP. First copy the file from catalogue to $TMPDIR and then execute for each file
+
+ciop-log "INFO" "EOIP Job"
+
+# build temporary job shared folders
+mkdir -p $S6DIR/data/output        
+export TMP_OUTPUT=$S6DIR/data/output/
+                                 
+mkdir -p $S6DIR/data/input                                                                                                      
+rm -rf $S6DIR/data/input/shapes/*
+mkdir -p $S6DIR/data/input/shapes/
+rm -rf $S6DIR/data/input/products/*
+mkdir -p $S6DIR/data/input/products/
+export TMP_INPUT=$S6DIR/data/input/
+export TMP_INPUT_SHAPE=$S6DIR/data/input/shapes/
+export TMP_INPUT_PROD=$S6DIR/data/input/products/
+
+rm -rf $S6DIR/create_ndvi/input/*
+mkdir -p $S6DIR/create_ndvi/input
+mkdir -p $S6DIR/create_ndvi/output                                                                                                       
+mkdir -p $S6DIR/create_ndvi/processed                                                                                                    
+mkdir -p $S6DIR/create_lai/output                                                                                                        
+mkdir -p $S6DIR/create_lai/processed                                                                                                     
+mkdir -p $S6DIR/convert_geotiff_asc/input                                                                                                
+mkdir -p $S6DIR/convert_geotiff_asc/output                                                                                               
+mkdir -p $S6DIR/convert_geotiff_asc/processed  
+mkdir -p $S6DIR/weka
+
+ciop-copy -f -o $CONFDIR $EOIP_BIN/eoip/eoip.json
+ciop-copy -f -o $S6DIR/weka $EOIP_BIN/weka/*
+ciop-copy -f -o $S6DIR $EOIP_BIN/kd_lai*
+ciop-copy -f -o $S6DIR $EOIP_BIN/sensyf-tile*
+
+# copying the product once into the hadoop context
+for product in $(find $EOIP_IMAGEDIR -iname '*.TIF' )
+do
+    ciop-log "INFO" "Copying $product to HFS"
+    ciop-copy -f -o $TMP_INPUT_PROD $product
+done
+
+
+# process EOIP for each EOIP
+while read shape_file
+do
+    ciop-log "INFO" "Copying shape file: "$shape_file
+    ciop-copy -f -o $TMP_INPUT_SHAPE $EOIP_INPUT$shape_file.shp
+    ciop-copy -f -o $TMP_INPUT_SHAPE $EOIP_INPUT$shape_file.shx
+    ciop-copy -f -o $TMP_INPUT_SHAPE $EOIP_INPUT$shape_file.prj
+    ciop-copy -f -o $TMP_INPUT_SHAPE $EOIP_INPUT$shape_file.dbf
+    #ciop-copy -f -o $TMP_INPUT_SHAPE $EOIP_INPUT$shape_file*
+    # get the unprocessed images and cut using shape
+    for product in $(find $TMP_INPUT_PROD -iname '*.tif' )
+    do
+        ciop-log "INFO" "Processing shape $shape_file for product $product"
+        product_base=$(basename $product)
+
+        cp $TMP_INPUT_SHAPE/$shape_file.shp $TMP_OUTPUT/
+	cp $TMP_INPUT_SHAPE/$shape_file.shx $TMP_OUTPUT/
+	cp $TMP_INPUT_SHAPE/$shape_file.prj $TMP_OUTPUT/
+	cp $TMP_INPUT_SHAPE/$shape_file.dbf $TMP_OUTPUT/
+
+        ciop-log "INFO" "Shape: $shape_file"
+        ciop-log "INFO" "Product: $product_base"
+
+        ciop-log "INFO" "Argument 1: $CONFDIR/eoip.json"
+        ciop-log "INFO" "Argument 2: $S6DIR"
+        ciop-log "INFO" "Argument 3: $TMP_INPUT_SHAPE/$shape_file"
+        ciop-log "INFO" "Argument 4: $TMP_INPUT_PROD/$product_base"
+
+        $EOIP_BIN/run.py $CONFDIR/eoip.json $S6DIR $TMP_INPUT_SHAPE/$shape_file.shp $TMP_INPUT_PROD/$product_base
+
+    done
+
+    cd $TMP_OUTPUT; tar zcvf $shape_file.tgz *$shape_file*; cd -
+    ciop-publish $TMP_OUTPUT/$shape_file.tgz
+
+    rm $TMP_OUTPUT/*
+
+done
+
+exit 0

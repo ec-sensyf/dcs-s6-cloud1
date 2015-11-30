@@ -1,0 +1,24 @@
+
+Time taken to build model: 6.71 seconds
+Time taken to test model on training data: 6.71 seconds
+
+=== Error on training data ===
+
+Correlation coefficient                  0.9856
+Mean absolute error                      0.0487
+Root mean squared error                  0.1633
+Relative absolute error                  6.0833 %
+Root relative squared error             16.9197 %
+Total Number of Instances           100127     
+
+
+
+=== Cross-validation ===
+
+Correlation coefficient                  0.9796
+Mean absolute error                      0.0567
+Root mean squared error                  0.1938
+Relative absolute error                  7.0861 %
+Root relative squared error             20.0785 %
+Total Number of Instances           100127     
+
